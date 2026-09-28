@@ -1,0 +1,20 @@
+# AWS
+aws_region = "us-east-1"
+instance_type = "t2.micro"
+
+# SSH
+key_name = "opencode-office"
+ssh_public_key_path = "~/.ssh/opencode_office.pub"
+
+# Gitea
+gitea_version = "1.23.6"
+
+# API keys (REQUIRED — replace with your own)
+openrouter_api_key = "sk-or-v1-your-openrouter-key-here"
+
+# Optional: Discord bot token for Product Manager agent
+discord_bot_token = ""
+
+# Optional: Domain for HTTPS via Let's Encrypt
+domain_name        = ""
+letsencrypt_email  = ""

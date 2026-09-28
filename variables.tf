@@ -1,0 +1,89 @@
+variable "aws_region" {
+  description = "AWS region to deploy into"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_name" {
+  description = "Project name used for resource naming"
+  type        = string
+  default     = "opencode-office"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type (t2.micro is free tier eligible)"
+  type        = string
+  default     = "t2.micro"
+}
+
+variable "key_name" {
+  description = "Name of the SSH key pair"
+  type        = string
+  default     = "opencode-office"
+}
+
+variable "ssh_public_key_path" {
+  description = "Path to the SSH public key file"
+  type        = string
+  default     = "~/.ssh/opencode_office.pub"
+}
+
+variable "gitea_version" {
+  description = "Gitea version to install"
+  type        = string
+  default     = "1.23.6"
+}
+
+variable "gitea_admin_password" {
+  description = "Gitea admin user password (also used by the Gitea Terraform provider)"
+  type        = string
+  sensitive   = true
+}
+
+variable "bootstrap_wait" {
+  description = "Seconds to wait for Gitea bootstrap before provisioning repos"
+  type        = string
+  default     = "120s"
+}
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI model access"
+  type        = string
+  sensitive   = true
+}
+
+variable "discord_bot_token" {
+  description = "Discord bot token for the Product Manager agent"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "domain_name" {
+  description = "Domain name for HTTPS (optional). Requires DNS A record pointed to the instance IP."
+  type        = string
+  default     = ""
+}
+
+variable "letsencrypt_email" {
+  description = "Email for Let's Encrypt notifications (required if domain_name is set)"
+  type        = string
+  default     = ""
+}
+
+variable "source_repo_url" {
+  description = "Public git URL of this project (e.g. GitHub). If set, the bootstrap clones and pushes these tofu files into the AgentOffice - Tofu Gitea repo."
+  type        = string
+  default     = ""
+}
+  variable "agent_models" {
+  description = "Models per agent role"
+  type = map(string)
+  default = {
+    architect         = "openrouter/deepseek/deepseek-v4-pro"
+    staff_tech_lead   = "openrouter/deepseek/deepseek-v4-pro"
+    senior_developer  = "openrouter/deepseek/deepseek-v4-pro"
+    junior_developer  = "openrouter/deepseek/deepseek-v4-pro"
+    product_manager   = "openrouter/deepseek/deepseek-v4-pro"
+  }
+}
