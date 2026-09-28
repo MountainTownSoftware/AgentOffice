@@ -15,7 +15,7 @@ output "gitea_url" {
 
 output "ssh_command" {
   description = "SSH connect command"
-  value       = "ssh -i ~/.ssh/opencode_office ubuntu@${aws_eip.office.public_ip}"
+  value       = "ssh -i ~/.ssh/agent-office ubuntu@${aws_eip.office.public_ip}"
 }
 
 output "gitea_admin_password" {

@@ -40,7 +40,7 @@ cd opencode-office
 ### Generate SSH key
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/opencode_office -N ""
+ssh-keygen -t ed25519 -f ~/.ssh/agent-office -N ""
 ```
 
 ### Configure variables
@@ -95,7 +95,7 @@ Add each agent account: `agent-architect`, `agent-pm`, `agent-lead`, `agent-seni
 SSH into the instance:
 
 ```bash
-ssh -i ~/.ssh/opencode_office ubuntu@<PUBLIC_IP>
+ssh -i ~/.ssh/agent-office ubuntu@<PUBLIC_IP>
 ```
 
 Start all agents:

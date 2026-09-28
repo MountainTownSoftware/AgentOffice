@@ -20,7 +20,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# SSH key pair - create before apply: ssh-keygen -t ed25519 -f opencode-office
+# SSH key pair - create before apply: ssh-keygen -t ed25519 -f agent-office
 resource "aws_key_pair" "office" {
   key_name   = var.key_name
   public_key = file(var.ssh_public_key_path)
@@ -76,7 +76,7 @@ resource "aws_instance" "office" {
   subnet_id              = aws_subnet.public.id
   key_name               = aws_key_pair.office.key_name
   vpc_security_group_ids = [aws_security_group.office.id]
-  iam_instance_profile   = aws_iam_instance_profile.opencode_office.name
+  iam_instance_profile   = aws_iam_instance_profile.agent_office.name
   user_data_base64 = base64gzip(templatefile("${path.module}/user_data.sh.tpl", {
     gitea_version     = var.gitea_version
     domain_name       = var.domain_name

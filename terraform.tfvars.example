@@ -9,7 +9,7 @@ subnet_cidr   = "10.0.1.0/24"
 
 # SSH
 key_name = "opencode-office"
-ssh_public_key_path = "~/.ssh/opencode_office.pub"
+ssh_public_key_path = "~/.ssh/agent-office.pub"
 
 # Gitea
 gitea_version = "1.23.6"

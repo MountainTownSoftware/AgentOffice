@@ -47,7 +47,7 @@ Each agent has its own Linux account, its own Redis queue, and runs as a systemd
 git clone <repo-url> && cd opencode-office
 
 # 2. Generate SSH key
-ssh-keygen -t ed25519 -f ~/.ssh/opencode_office -N ""
+ssh-keygen -t ed25519 -f ~/.ssh/agent-office -N ""
 
 # 3. Configure
 cp terraform.tfvars.example terraform.tfvars
@@ -57,7 +57,7 @@ cp terraform.tfvars.example terraform.tfvars
 tofu init && tofu apply
 
 # 5. SSH in and start agents
-ssh -i ~/.ssh/opencode_office ubuntu@<public-ip>
+ssh -i ~/.ssh/agent-office ubuntu@<public-ip>
 for agent in agent-architect agent-pm agent-lead agent-senior agent-junior agent-sdet; do
   sudo systemctl start opencode-agent-daemon@$agent
 done
