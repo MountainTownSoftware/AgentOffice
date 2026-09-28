@@ -113,6 +113,7 @@ variable "source_repo_url" {
     senior_developer  = "openrouter/deepseek/deepseek-v4-pro"
     junior_developer  = "openrouter/deepseek/deepseek-v4-pro"
     product_manager   = "openrouter/deepseek/deepseek-v4-pro"
+    sdet              = "openrouter/deepseek/deepseek-v4-pro"
   }
 }
 

@@ -36,6 +36,7 @@ Gitea Issue → Webhook → Redis Queue → Agent Daemon → opencode run → gi
 | Staff Tech Lead | `agent-lead` | Triage, work assignment |
 | Senior Developer | `agent-senior` | Complex implementation |
 | Junior Developer | `agent-junior` | Simpler tasks |
+| SDET (QA) | `agent-sdet` | Testing and quality assurance |
 
 Each agent has its own Linux account, its own Redis queue, and runs as a systemd daemon.
 
@@ -57,7 +58,7 @@ tofu init && tofu apply
 
 # 5. SSH in and start agents
 ssh -i ~/.ssh/opencode_office ubuntu@<public-ip>
-for agent in agent-architect agent-pm agent-lead agent-senior agent-junior; do
+for agent in agent-architect agent-pm agent-lead agent-senior agent-junior agent-sdet; do
   sudo systemctl start opencode-agent-daemon@$agent
 done
 ```

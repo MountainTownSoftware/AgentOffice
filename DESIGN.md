@@ -92,3 +92,6 @@ Works at a senior level, using an appropriate model.
 
 ## Junior Developer
 Works at a junior level, using an appropriate model.
+
+## SDET (QA)
+Specializes in testing and quality assurance. Writes and runs tests, validates agent work.

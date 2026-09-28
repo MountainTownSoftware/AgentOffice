@@ -16,6 +16,7 @@ MODEL_PM="${agent_models["product_manager"]}"
 MODEL_LEAD="${agent_models["staff_tech_lead"]}"
 MODEL_SENIOR="${agent_models["senior_developer"]}"
 MODEL_JUNIOR="${agent_models["junior_developer"]}"
+MODEL_SDET="${agent_models["sdet"]}"
 
 ################################################
 # Secrets — read from AWS Secrets Manager
@@ -166,6 +167,7 @@ AGENT_MODEL_MAP[agent-pm]="$MODEL_PM"
 AGENT_MODEL_MAP[agent-lead]="$MODEL_LEAD"
 AGENT_MODEL_MAP[agent-senior]="$MODEL_SENIOR"
 AGENT_MODEL_MAP[agent-junior]="$MODEL_JUNIOR"
+AGENT_MODEL_MAP[agent-sdet]="$MODEL_SDET"
 
 declare -A AGENT_DISPLAY
 AGENT_DISPLAY[agent-architect]="Architect Agent"
@@ -173,8 +175,9 @@ AGENT_DISPLAY[agent-pm]="Product Manager"
 AGENT_DISPLAY[agent-lead]="Staff Tech Lead"
 AGENT_DISPLAY[agent-senior]="Senior Developer"
 AGENT_DISPLAY[agent-junior]="Junior Developer"
+AGENT_DISPLAY[agent-sdet]="SDET (QA)"
 
-AGENT_USERS=("agent-architect" "agent-pm" "agent-lead" "agent-senior" "agent-junior")
+AGENT_USERS=("agent-architect" "agent-pm" "agent-lead" "agent-senior" "agent-junior" "agent-sdet")
 
 for username in "$${AGENT_USERS[@]}"; do
   if ! id -u "$username" >/dev/null 2>&1; then
@@ -260,7 +263,7 @@ r = redis.Redis(host=os.environ.get('REDIS_HOST','localhost'),
 AGENT_MAP = {
     'agent-architect':'queue:agent-architect','agent-pm':'queue:agent-pm',
     'agent-lead':'queue:agent-lead','agent-senior':'queue:agent-senior',
-    'agent-junior':'queue:agent-junior',
+    'agent-junior':'queue:agent-junior','agent-sdet':'queue:agent-sdet',
 }
 
 def route(event_type, payload):

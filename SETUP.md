@@ -101,7 +101,7 @@ ssh -i ~/.ssh/opencode_office ubuntu@<PUBLIC_IP>
 Start all agents:
 
 ```bash
-for agent in agent-architect agent-pm agent-lead agent-senior agent-junior; do
+for agent in agent-architect agent-pm agent-lead agent-senior agent-junior agent-sdet; do
   sudo systemctl start opencode-agent-daemon@$agent
 done
 ```
@@ -274,6 +274,7 @@ tofu apply -auto-approve
 | Staff Tech Lead | agent-lead | queue:agent-lead | Triage, work assignment |
 | Senior Developer | agent-senior | queue:agent-senior | Complex implementation |
 | Junior Developer | agent-junior | queue:agent-junior | Simpler tasks |
+| SDET (QA) | agent-sdet | queue:agent-sdet | Testing and quality assurance |
 
 ## Adding New Agents
 
