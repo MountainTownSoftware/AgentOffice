@@ -28,8 +28,9 @@ resource "aws_key_pair" "office" {
 
 # Security group
 resource "aws_security_group" "office" {
-  name        = "${var.project_name}-sg"
+  name        = "${var.project_name}-${var.vpc_name}-sg"
   description = "Security group for OpenCode Office"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
@@ -63,7 +64,7 @@ resource "aws_security_group" "office" {
   }
 
   tags = {
-    Name    = "${var.project_name}-sg"
+    Name    = "${var.project_name}-${var.vpc_name}-sg"
     Project = var.project_name
   }
 }
@@ -72,6 +73,7 @@ resource "aws_security_group" "office" {
 resource "aws_instance" "office" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
   key_name               = aws_key_pair.office.key_name
   vpc_security_group_ids = [aws_security_group.office.id]
   iam_instance_profile   = aws_iam_instance_profile.opencode_office.name
@@ -83,6 +85,8 @@ resource "aws_instance" "office" {
     project_name      = var.project_name
     aws_region        = var.aws_region
     source_repo_url   = var.source_repo_url
+    atlantis_version  = var.atlantis_version
+    tofu_version      = var.tofu_version
   }))
   user_data_replace_on_change = true
 
@@ -93,7 +97,7 @@ resource "aws_instance" "office" {
   }
 
   tags = {
-    Name    = "${var.project_name}-instance"
+    Name    = "${var.project_name}-${var.vpc_name}-instance"
     Project = var.project_name
   }
 }

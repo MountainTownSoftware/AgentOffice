@@ -1,6 +1,11 @@
 # AWS
-aws_region = "us-east-1"
+aws_region    = "us-east-1"
 instance_type = "t2.micro"
+
+# VPC — use different vpc_name for isolated deployments
+vpc_name      = "agentoffice"
+vpc_cidr      = "10.0.0.0/16"
+subnet_cidr   = "10.0.1.0/24"
 
 # SSH
 key_name = "opencode-office"
@@ -8,6 +13,10 @@ ssh_public_key_path = "~/.ssh/opencode_office.pub"
 
 # Gitea
 gitea_version = "1.23.6"
+
+# Atlantis + OpenTofu
+atlantis_version = "0.33.0"
+tofu_version     = "1.9.0"
 
 # API keys (REQUIRED — replace with your own)
 openrouter_api_key = "sk-or-v1-your-openrouter-key-here"

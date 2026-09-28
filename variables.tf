@@ -4,6 +4,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "availability_zone" {
+  description = "AWS availability zone for the subnet"
+  type        = string
+  default     = "us-east-1a"
+}
+
 variable "project_name" {
   description = "Project name used for resource naming"
   type        = string
@@ -59,6 +65,28 @@ variable "discord_bot_token" {
   default     = ""
 }
 
+# --- VPC / Networking ---
+
+variable "vpc_name" {
+  description = "Name for the VPC. Use different names to deploy isolated AgentOffice instances in separate VPCs."
+  type        = string
+  default     = "agentoffice"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "subnet_cidr" {
+  description = "CIDR block for the public subnet"
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+# --- Domain ---
+
 variable "domain_name" {
   description = "Domain name for HTTPS (optional). Requires DNS A record pointed to the instance IP."
   type        = string
@@ -86,4 +114,16 @@ variable "source_repo_url" {
     junior_developer  = "openrouter/deepseek/deepseek-v4-pro"
     product_manager   = "openrouter/deepseek/deepseek-v4-pro"
   }
+}
+
+variable "atlantis_version" {
+  description = "Atlantis version to install"
+  type        = string
+  default     = "0.33.0"
+}
+
+variable "tofu_version" {
+  description = "OpenTofu version to install"
+  type        = string
+  default     = "1.9.0"
 }

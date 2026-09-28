@@ -9,6 +9,8 @@ LETSENCRYPT_EMAIL="${letsencrypt_email}"
 PROJECT_NAME="${project_name}"
 AWS_REGION="${aws_region}"
 SOURCE_REPO_URL="${source_repo_url}"
+ATLANTIS_VERSION="${atlantis_version}"
+TOFU_VERSION="${tofu_version}"
 MODEL_ARCHITECT="${agent_models["architect"]}"
 MODEL_PM="${agent_models["product_manager"]}"
 MODEL_LEAD="${agent_models["staff_tech_lead"]}"
@@ -472,6 +474,14 @@ server {
     listen 80 default_server;
     server_name _;
 
+    location /atlantis {
+        proxy_pass http://127.0.0.1:4141;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location /webhook {
         proxy_pass http://127.0.0.1:9090;
         proxy_set_header Host $host;
@@ -505,6 +515,101 @@ if [ -n "$DOMAIN_NAME" ] && [ -n "$LETSENCRYPT_EMAIL" ]; then
 
   systemctl reload nginx
 fi
+
+################################################
+# Atlantis (OpenTofu PR automation)
+################################################
+
+# Install OpenTofu
+wget -q "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.zip" -O /tmp/tofu.zip
+unzip -oq /tmp/tofu.zip -d /usr/local/bin/ tofu 2>/dev/null || unzip -q /tmp/tofu.zip -d /usr/local/bin/
+chmod +x /usr/local/bin/tofu
+rm -f /tmp/tofu.zip
+
+# Install Atlantis
+wget -q "https://github.com/runatlantis/atlantis/releases/download/v${ATLANTIS_VERSION}/atlantis_linux_amd64.zip" -O /tmp/atlantis.zip
+unzip -oq /tmp/atlantis.zip -d /usr/local/bin/ atlantis 2>/dev/null || unzip -q /tmp/atlantis.zip -d /usr/local/bin/
+chmod +x /usr/local/bin/atlantis
+rm -f /tmp/atlantis.zip
+
+# Atlantis user
+if ! id -u atlantis >/dev/null 2>&1; then
+  useradd -r -m -s /bin/bash atlantis
+fi
+mkdir -p /var/lib/atlantis
+chown -R atlantis:atlantis /var/lib/atlantis
+
+# Create Gitea user + token for Atlantis
+ATLANTIS_PW=$(openssl rand -base64 16)
+sudo -u gitea GITEA_WORK_DIR=/var/lib/gitea /usr/local/bin/gitea admin user create \
+  --username atlantis --password "$ATLANTIS_PW" \
+  --email atlantis@opencode.office.local --must-change-password=false \
+  --config /etc/gitea/app.ini 2>/dev/null || true
+
+sleep 2
+ATLANTIS_TOKEN=$(curl -sf -X POST "http://localhost:3000/api/v1/users/atlantis/tokens" \
+  -u "atlantis:$ATLANTIS_PW" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"atlantis-server","scopes":["read:repository","write:repository","read:issue","write:issue"]}' 2>/dev/null | jq -r '.sha1 // empty')
+WEBHOOK_SECRET=$(openssl rand -hex 16)
+
+# Atlantis URL (same external URL that Gitea webhooks hit)
+if [ -n "$DOMAIN_NAME" ]; then
+  ATLANTIS_URL="https://$DOMAIN_NAME/atlantis"
+else
+  PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+  ATLANTIS_URL="http://$PUBLIC_IP/atlantis"
+fi
+
+cat > /home/atlantis/.atlantis-env << ATENV
+ATLANTIS_GITEA_USER=atlantis
+ATLANTIS_GITEA_TOKEN=$ATLANTIS_TOKEN
+ATLANTIS_GITEA_BASE_URL=http://localhost:3000
+ATLANTIS_GITEA_WEBHOOK_SECRET=$WEBHOOK_SECRET
+ATLANTIS_GITEA_PAGE_SIZE=30
+ATLANTIS_REPO_ALLOWLIST=admin/agent-office-tofu
+ATLANTIS_PORT=4141
+ATLANTIS_DATA_DIR=/var/lib/atlantis
+ATLANTIS_TF_DISTRIBUTION=opentofu
+ATLANTIS_DEFAULT_TF_VERSION=$TOFU_VERSION
+ATLANTIS_ENABLE_POLICY_CHECKS=false
+ATLANTIS_ATLANTIS_URL=$ATLANTIS_URL
+ATENV
+chown atlantis:atlantis /home/atlantis/.atlantis-env
+chmod 600 /home/atlantis/.atlantis-env
+
+# Register Atlantis webhook in Gitea repo (retry in case repo not yet created)
+for _ in $(seq 1 12); do
+  curl -sf -X POST "http://localhost:3000/api/v1/repos/admin/agent-office-tofu/hooks" \
+    -u "admin:$ADMIN_PW" \
+    -H "Content-Type: application/json" \
+    -d "{\"type\":\"gitea\",\"config\":{\"url\":\"$ATLANTIS_URL/events\",\"content_type\":\"json\",\"secret\":\"$WEBHOOK_SECRET\"},\"events\":[\"pull_request\"],\"active\":true}" \
+    > /dev/null 2>&1 && break
+  sleep 10
+done
+
+# Atlantis systemd service
+cat > /etc/systemd/system/atlantis.service << 'ATUNIT'
+[Unit]
+Description=Atlantis
+After=network.target gitea.service
+Wants=gitea.service
+
+[Service]
+Type=simple
+User=atlantis
+Group=atlantis
+EnvironmentFile=/home/atlantis/.atlantis-env
+ExecStart=/usr/local/bin/atlantis server
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+ATUNIT
+
+systemctl daemon-reload
+systemctl enable atlantis
 
 ################################################
 # Enable services
