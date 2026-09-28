@@ -1,0 +1,81 @@
+# OpenCode Office
+
+A semi-autonomous AI development team running on a single AWS EC2 instance — provisioned entirely with OpenTofu.
+
+Five AI agents (Architect, Product Manager, Staff Tech Lead, Senior Developer, Junior Developer) collaborate via Gitea issues and git pull requests, each driven by [OpenCode](https://opencode.ai) with models from [OpenRouter](https://openrouter.ai).
+
+## How It Works
+
+```
+Gitea Issue → Webhook → Redis Queue → Agent Daemon → opencode run → git push → PR → Comment
+```
+
+1. A human creates an issue in Gitea (or messages the PM Agent via Discord)
+2. The webhook receiver routes it to the right agent's Redis queue
+3. The agent daemon picks it up, runs `opencode run` with the issue context
+4. The agent writes code, runs tests, pushes a branch, and opens a pull request
+5. The agent comments on the issue with the PR link and status
+6. A human reviews and merges
+
+## Architecture
+
+| Component | Role |
+|---|---|
+| **Gitea** | Git hosting + issue tracker (all communication is audited) |
+| **Redis** | Per-agent work queues (BLPOP → one task at a time) |
+| **OpenCode** | The AI coding agent that does the actual work |
+| **OpenRouter** | Model provider (DeepSeek V4 Pro by default) |
+| **Nginx** | Reverse proxy with optional Let's Encrypt HTTPS |
+
+### Agents
+
+| Agent | Linux User | Role |
+|---|---|---|
+| Architect | `agent-architect` | System design, architecture decisions |
+| Product Manager | `agent-pm` | Discord → Gitea ticket creation |
+| Staff Tech Lead | `agent-lead` | Triage, work assignment |
+| Senior Developer | `agent-senior` | Complex implementation |
+| Junior Developer | `agent-junior` | Simpler tasks |
+
+Each agent has its own Linux account, its own Redis queue, and runs as a systemd daemon.
+
+## Deploy
+
+```bash
+# 1. Clone
+git clone <repo-url> && cd opencode-office
+
+# 2. Generate SSH key
+ssh-keygen -t ed25519 -f ~/.ssh/opencode_office -N ""
+
+# 3. Configure
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your OpenRouter API key and (optionally) a domain
+
+# 4. Deploy
+tofu init && tofu apply
+
+# 5. SSH in and start agents
+ssh -i ~/.ssh/opencode_office ubuntu@<public-ip>
+for agent in agent-architect agent-pm agent-lead agent-senior agent-junior; do
+  sudo systemctl start opencode-agent-daemon@$agent
+done
+```
+
+See [SETUP.md](SETUP.md) for full step-by-step instructions including HTTPS setup and monitoring.
+
+## Requirements
+
+- AWS account
+- [OpenTofu](https://opentofu.org) ≥ 1.6 (or Terraform)
+- [OpenRouter API key](https://openrouter.ai/keys)
+- (Optional) A domain name for HTTPS via Let's Encrypt
+- (Optional) A Discord bot token for the Product Manager agent
+
+## Tech Stack
+
+OpenTofu · Gitea · Redis · Nginx · Python · OpenCode · OpenRouter · systemd · AWS EC2 · Let's Encrypt
+
+## License
+
+MIT
