@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # AgentOffice — macOS / Linux install script
-# Usage: bash <(curl -s https://github.com/MOuntainTownSoftware/AgentOffice/raw/main/install/install.sh)
+# Usage: bash <(curl -s https://raw.githubusercontent.com/MountainTownSoftware/AgentOffice/refs/heads/main/install/mac-install.sh)
 
-REPO_URL="${AGENTOFFICE_REPO_URL:-https://github.com/MOuntainTownSoftware/AgentOffice}"
+REPO_URL="${AGENTOFFICE_REPO_URL:-https://github.com/MountainTownSoftware/AgentOffice}"
 REPO_RAW="${REPO_URL/\/github.com/\/raw.githubusercontent.com}/main"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'

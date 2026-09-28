@@ -40,11 +40,33 @@ Gitea Issue → Webhook → Redis Queue → Agent Daemon → opencode run → gi
 
 Each agent has its own Linux account, its own Redis queue, and runs as a systemd daemon.
 
-## Deploy
+## Install
+
+The fastest way to get started is the one-command installer, which checks for missing dependencies, installs them, configures your AWS credentials and SSH key, and walks through deployment:
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/MountainTownSoftware/AgentOffice/refs/heads/main/install/mac-install.sh)
+```
+
+Linux users can use the same script via `linux-install.sh`, or the platform-agnostic form:
+
+```bash
+curl -s https://raw.githubusercontent.com/MountainTownSoftware/AgentOffice/refs/heads/main/install/install.sh | bash
+```
+
+The installer:
+1. Checks for and installs `git`, `brew` (macOS), `tofu`, `awscli`, and `jq`
+2. Configures AWS credentials
+3. Generates an SSH key
+4. Clones the repository
+5. Prompts for your OpenRouter API key, Gitea admin password, domain, and Discord token
+6. Runs `tofu init && tofu plan`, then offers to apply
+
+## Manual Deploy
 
 ```bash
 # 1. Clone
-git clone <repo-url> && cd opencode-office
+git clone https://github.com/MountainTownSoftware/AgentOffice.git agent-office && cd agent-office/tofu
 
 # 2. Generate SSH key
 ssh-keygen -t ed25519 -f ~/.ssh/agent-office -N ""
