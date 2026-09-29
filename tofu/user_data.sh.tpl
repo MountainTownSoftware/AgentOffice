@@ -33,7 +33,7 @@ if ! command -v aws >/dev/null 2>&1; then
 fi
 
 SECRETS_JSON=$(aws secretsmanager get-secret-value \
-  --secret-id "${PROJECT_NAME}-secrets" \
+  --secret-id "${project_name}-secrets" \
   --region "$AWS_REGION" \
   --query SecretString \
   --output text 2>/dev/null || echo '{}')
