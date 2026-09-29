@@ -270,11 +270,26 @@ step_configure() {
     if [[ ! "$OVERWRITE" =~ ^[Yy] ]]; then return 0; fi
   fi
 
+  local prev_or_key=""
+  local prev_domain=""
+  local prev_discord=""
+
+  if [ -f terraform.tfvars ]; then
+    prev_or_key="$(grep -E '^\s*openrouter_api_key\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
+    prev_domain="$(grep -E '^\s*domain_name\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
+    prev_discord="$(grep -E '^\s*discord_bot_token\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
+  fi
+
   echo ""
 
   # OpenRouter API key
-  prompt "OpenRouter API key [sk-or-v1-...]: "
+  if [ -n "$prev_or_key" ]; then
+    prompt "OpenRouter API key [$prev_or_key]: "
+  else
+    prompt "OpenRouter API key [sk-or-v1-...]: "
+  fi
   read -r OR_KEY
+  OR_KEY="${OR_KEY:-$prev_or_key}"
 
   # Gitea admin password
   prompt "Gitea admin password [auto-generate]: "
@@ -282,8 +297,13 @@ step_configure() {
   GITEA_PW="${GITEA_PW:-$(openssl rand -base64 16 2>/dev/null || python3 -c 'import secrets;print(secrets.token_urlsafe(16))' 2>/dev/null || echo 'changeme123')}"
 
   # Domain (optional)
-  prompt "Domain name for HTTPS [leave blank for IP-only]: "
+  if [ -n "$prev_domain" ]; then
+    prompt "Domain name for HTTPS [$prev_domain]: "
+  else
+    prompt "Domain name for HTTPS [leave blank for IP-only]: "
+  fi
   read -r DOMAIN_NAME
+  DOMAIN_NAME="${DOMAIN_NAME:-$prev_domain}"
 
   LE_EMAIL=""
   if [ -n "$DOMAIN_NAME" ]; then
@@ -292,8 +312,13 @@ step_configure() {
   fi
 
   # Discord (optional)
-  prompt "Discord bot token [leave blank to skip]: "
+  if [ -n "$prev_discord" ]; then
+    prompt "Discord bot token [$prev_discord]: "
+  else
+    prompt "Discord bot token [leave blank to skip]: "
+  fi
   read -r DISCORD_TOKEN
+  DISCORD_TOKEN="${DISCORD_TOKEN:-$prev_discord}"
 
   # VPC name
   prompt "VPC name [agentoffice]: "

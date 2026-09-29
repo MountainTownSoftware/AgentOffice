@@ -524,13 +524,13 @@ fi
 ################################################
 
 # Install OpenTofu
-wget -q "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.zip" -O /tmp/tofu.zip
+wget -q "https://github.com/opentofu/opentofu/releases/download/v$${TOFU_VERSION}/tofu_$${TOFU_VERSION}_linux_amd64.zip" -O /tmp/tofu.zip
 unzip -oq /tmp/tofu.zip -d /usr/local/bin/ tofu 2>/dev/null || unzip -q /tmp/tofu.zip -d /usr/local/bin/
 chmod +x /usr/local/bin/tofu
 rm -f /tmp/tofu.zip
 
 # Install Atlantis
-wget -q "https://github.com/runatlantis/atlantis/releases/download/v${ATLANTIS_VERSION}/atlantis_linux_amd64.zip" -O /tmp/atlantis.zip
+wget -q "https://github.com/runatlantis/atlantis/releases/download/v$${ATLANTIS_VERSION}/atlantis_linux_amd64.zip" -O /tmp/atlantis.zip
 unzip -oq /tmp/atlantis.zip -d /usr/local/bin/ atlantis 2>/dev/null || unzip -q /tmp/atlantis.zip -d /usr/local/bin/
 chmod +x /usr/local/bin/atlantis
 rm -f /tmp/atlantis.zip
