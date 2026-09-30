@@ -5,9 +5,13 @@ variable "aws_region" {
 }
 
 variable "availability_zone" {
-  description = "AWS availability zone for the subnet"
+  description = <<-EOT
+    AWS availability zone for the subnet. Empty means "derive it from
+    aws_region" (e.g. us-east-2 -> us-east-2a), which keeps the AZ in sync
+    with the region instead of silently failing on a mismatch.
+  EOT
   type        = string
-  default     = "us-east-1a"
+  default     = ""
 }
 
 variable "project_name" {

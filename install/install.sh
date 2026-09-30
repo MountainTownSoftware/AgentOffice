@@ -405,6 +405,10 @@ step_configure() {
 aws_region    = "$(aws configure get region 2>/dev/null || echo 'us-east-1')"
 instance_type = "t2.micro"
 
+# Availability zone is intentionally not set here — it is derived from
+# aws_region by the config. Setting it explicitly risks a region/AZ mismatch,
+# which EC2 rejects with InvalidParameterValue on CreateSubnet.
+
 # VPC
 vpc_name      = "$VPC_NAME"
 vpc_cidr      = "10.0.0.0/16"
