@@ -156,6 +156,36 @@ sudo -u gitea GITEA_WORK_DIR=/var/lib/gitea /usr/local/bin/gitea admin user crea
   --config /etc/gitea/app.ini 2>/dev/null || true
 
 ################################################
+# Self-host repo
+#
+# Created from inside the instance rather than by OpenTofu: the Gitea provider
+# would have to reach a server that does not exist yet, and the domain does not
+# resolve until this instance has a public IP. So there is no way for a
+# single-apply bootstrap to do it from the outside.
+################################################
+
+for _ in $(seq 1 30); do
+  curl -sf -u "admin:$ADMIN_PW" "http://localhost:3000/api/v1/version" >/dev/null 2>&1 && break
+  sleep 2
+done
+
+if ! curl -sf -u "admin:$ADMIN_PW" \
+    "http://localhost:3000/api/v1/repos/admin/agent-office-tofu" >/dev/null 2>&1; then
+  curl -sf -X POST "http://localhost:3000/api/v1/user/repos" \
+    -u "admin:$ADMIN_PW" \
+    -H "Content-Type: application/json" \
+    -d '{
+          "name": "agent-office-tofu",
+          "description": "AgentOffice infrastructure — bootstrap OpenTofu files",
+          "private": true,
+          "auto_init": true,
+          "default_branch": "main",
+          "issues": true,
+          "pull_requests": true
+        }' >/dev/null 2>&1 && echo "Created repo admin/agent-office-tofu" || true
+fi
+
+################################################
 # Agent accounts
 ################################################
 AGENT_DIR=/opt/opencode-office
@@ -632,8 +662,8 @@ done
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 
 if [ -n "$SOURCE_REPO_URL" ]; then
-  # Wait for the "agent-office-tofu" repo (created by Terraform) to exist.
-  for i in $(seq 1 60); do
+  # The repo was created above during bootstrap; wait for it to be reachable.
+  for i in $(seq 1 12); do
     if curl -sf -u "admin:$ADMIN_PW" \
       "http://localhost:3000/api/v1/repos/admin/agent-office-tofu" >/dev/null 2>&1; then
       break

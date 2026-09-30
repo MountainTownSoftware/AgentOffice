@@ -29,6 +29,71 @@ _pause() {
   read -r
 }
 
+# Capture existing terraform.tfvars values before any directory is
+# removed or re-cloned, so a re-run can pre-fill the prompts.
+STATE_FILE="$HOME/.agent-office/last-install.tfvars"
+PREV_OR_KEY=""
+PREV_DOMAIN=""
+PREV_DISCORD=""
+PREV_GITEA_PW=""
+PREV_VPC=""
+PREV_LE_EMAIL=""
+
+_tfv_get() {
+  # _tfv_get <file> <key>
+  grep -E "^[[:space:]]*$2[[:space:]]*=" "$1" 2>/dev/null | \
+    sed -E 's/.*=[[:space:]]*"([^"]*)".*/\1/' | head -1
+}
+
+_load_tfvars() {
+  # _load_tfvars <file>
+  local f="$1"
+  [[ -f "$f" ]] || return 1
+  PREV_OR_KEY="$(_tfv_get "$f" openrouter_api_key)"
+  PREV_DOMAIN="$(_tfv_get "$f" domain_name)"
+  PREV_DISCORD="$(_tfv_get "$f" discord_bot_token)"
+  PREV_GITEA_PW="$(_tfv_get "$f" gitea_admin_password)"
+  PREV_VPC="$(_tfv_get "$f" vpc_name)"
+  PREV_LE_EMAIL="$(_tfv_get "$f" letsencrypt_email)"
+  [[ -n "$PREV_OR_KEY$PREV_DOMAIN$PREV_DISCORD$PREV_GITEA_PW" ]]
+}
+
+capture_previous_config() {
+  local candidates=()
+  [[ -f "tofu/terraform.tfvars" ]] && candidates+=("tofu/terraform.tfvars")
+  [[ -f "terraform.tfvars" ]] && candidates+=("terraform.tfvars")
+  [[ -f "./agent-office/tofu/terraform.tfvars" ]] && candidates+=("./agent-office/tofu/terraform.tfvars")
+  [[ -f "./agent-office/terraform.tfvars" ]] && candidates+=("./agent-office/terraform.tfvars")
+  [[ -f "$STATE_FILE" ]] && candidates+=("$STATE_FILE")
+
+  local f
+  for f in "${candidates[@]}"; do
+    if _load_tfvars "$f"; then
+      if [[ "$f" == "$STATE_FILE" ]]; then
+        info "Found config from your last install: $f"
+      else
+        info "Found previous config: $f"
+      fi
+      success "Reusing previous values (press Enter to keep, or type a new value)"
+      return 0
+    fi
+  done
+  return 0
+}
+
+save_config_cache() {
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || return 0
+  cat > "$STATE_FILE" << CACHEEOF
+openrouter_api_key  = "$OR_KEY"
+discord_bot_token   = "$DISCORD_TOKEN"
+domain_name         = "$DOMAIN_NAME"
+letsencrypt_email   = "$LE_EMAIL"
+gitea_admin_password = "$GITEA_PW"
+vpc_name            = "$VPC_NAME"
+CACHEEOF
+  chmod 600 "$STATE_FILE" 2>/dev/null || true
+}
+
 _install_brew() {
   if _command_exists brew; then return 0; fi
   warn "Homebrew not found. Installing..."
@@ -270,15 +335,9 @@ step_configure() {
     if [[ ! "$OVERWRITE" =~ ^[Yy] ]]; then return 0; fi
   fi
 
-  local prev_or_key=""
-  local prev_domain=""
-  local prev_discord=""
-
-  if [ -f terraform.tfvars ]; then
-    prev_or_key="$(grep -E '^\s*openrouter_api_key\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
-    prev_domain="$(grep -E '^\s*domain_name\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
-    prev_discord="$(grep -E '^\s*discord_bot_token\s*=' terraform.tfvars | sed -E 's/.*=\s*"([^"]*)".*/\1/' || true)"
-  fi
+  local prev_or_key="$PREV_OR_KEY"
+  local prev_domain="$PREV_DOMAIN"
+  local prev_discord="$PREV_DISCORD"
 
   echo ""
 
@@ -292,8 +351,13 @@ step_configure() {
   OR_KEY="${OR_KEY:-$prev_or_key}"
 
   # Gitea admin password
-  prompt "Gitea admin password [auto-generate]: "
+  if [ -n "$PREV_GITEA_PW" ]; then
+    prompt "Gitea admin password [$PREV_GITEA_PW]: "
+  else
+    prompt "Gitea admin password [auto-generate]: "
+  fi
   read -r GITEA_PW
+  GITEA_PW="${GITEA_PW:-$PREV_GITEA_PW}"
   GITEA_PW="${GITEA_PW:-$(openssl rand -base64 16 2>/dev/null || python3 -c 'import secrets;print(secrets.token_urlsafe(16))' 2>/dev/null || echo 'changeme123')}"
 
   # Domain (optional)
@@ -307,8 +371,13 @@ step_configure() {
 
   LE_EMAIL=""
   if [ -n "$DOMAIN_NAME" ]; then
-    prompt "Let's Encrypt email [required for HTTPS]: "
+    if [ -n "$PREV_LE_EMAIL" ]; then
+      prompt "Let's Encrypt email [$PREV_LE_EMAIL]: "
+    else
+      prompt "Let's Encrypt email [required for HTTPS]: "
+    fi
     read -r LE_EMAIL
+    LE_EMAIL="${LE_EMAIL:-$PREV_LE_EMAIL}"
   fi
 
   # Discord (optional)
@@ -321,8 +390,13 @@ step_configure() {
   DISCORD_TOKEN="${DISCORD_TOKEN:-$prev_discord}"
 
   # VPC name
-  prompt "VPC name [agentoffice]: "
+  if [ -n "$PREV_VPC" ]; then
+    prompt "VPC name [$PREV_VPC]: "
+  else
+    prompt "VPC name [agentoffice]: "
+  fi
   read -r VPC_NAME
+  VPC_NAME="${VPC_NAME:-$PREV_VPC}"
   VPC_NAME="${VPC_NAME:-agentoffice}"
 
   # Write terraform.tfvars
@@ -358,6 +432,7 @@ letsencrypt_email = "${LE_EMAIL:-}"
 TFEOL
 
   success "terraform.tfvars created"
+  save_config_cache
   echo ""
   info "Config saved. You can edit terraform.tfvars at any time."
   _pause
@@ -406,6 +481,9 @@ main() {
   step_check_deps
   step_aws_config
   step_ssh_key
+
+  # Read any existing config BEFORE the clone step can remove the directory
+  capture_previous_config
 
   # If we're already in the project directory, skip clone
   if [ -f "main.tf" ] || [ -f "tofu/main.tf" ]; then

@@ -104,16 +104,16 @@ variable "source_repo_url" {
   type        = string
   default     = ""
 }
-  variable "agent_models" {
+variable "agent_models" {
   description = "Models per agent role"
-  type = map(string)
+  type        = map(string)
   default = {
-    architect         = "openrouter/deepseek/deepseek-v4-pro"
-    staff_tech_lead   = "openrouter/deepseek/deepseek-v4-pro"
-    senior_developer  = "openrouter/deepseek/deepseek-v4-pro"
-    junior_developer  = "openrouter/deepseek/deepseek-v4-pro"
-    product_manager   = "openrouter/deepseek/deepseek-v4-pro"
-    sdet              = "openrouter/deepseek/deepseek-v4-pro"
+    architect        = "openrouter/deepseek/deepseek-v4-pro"
+    staff_tech_lead  = "openrouter/deepseek/deepseek-v4-pro"
+    senior_developer = "openrouter/deepseek/deepseek-v4-pro"
+    junior_developer = "openrouter/deepseek/deepseek-v4-pro"
+    product_manager  = "openrouter/deepseek/deepseek-v4-pro"
+    sdet             = "openrouter/deepseek/deepseek-v4-pro"
   }
 }
 
