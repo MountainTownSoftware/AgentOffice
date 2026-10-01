@@ -466,15 +466,71 @@ step_deploy() {
     echo ""
     info "Instance is bootstrapping (takes ~5-7 minutes)."
     info "SSH in once ready:"
-    echo "  ${BOLD}ssh -i ~/.ssh/agent-office ubuntu@\$(tofu output -raw instance_public_ip)${NC}"
+    echo -e "  ${BOLD}ssh -i ~/.ssh/agent-office ubuntu@\$(tofu output -raw instance_public_ip)${NC}"
     echo ""
     info "Then start the agents:"
-    echo "  ${BOLD}for agent in agent-architect agent-pm agent-lead agent-senior agent-junior agent-sdet; do"
-    echo "    sudo systemctl start opencode-agent-daemon@\$agent"
-    echo "  done${NC}"
+    echo -e "  ${BOLD}for agent in agent-architect agent-pm agent-lead agent-senior agent-junior agent-sdet; do"
+    echo -e "    sudo systemctl start opencode-agent-daemon@\$agent"
+    echo -e "  done${NC}"
   else
     info "To deploy later, run: ${BOLD}cd $(pwd) && tofu apply${NC}"
   fi
+}
+
+step_dns() {
+  local domain=""
+  if [ -f terraform.tfvars ]; then
+    domain="$(grep -E '^[[:space:]]*domain_name[[:space:]]*=' terraform.tfvars \
+      | sed -E 's/.*=[[:space:]]*"([^"]*)".*/\1/' | head -1)"
+  fi
+
+  step "DNS"
+
+  if [ -z "$domain" ]; then
+    info "No domain configured — skipping DNS."
+    info "Gitea is reachable at the instance IP over plain HTTP:"
+    echo -e "  ${BOLD}http://\$(tofu output -raw instance_public_ip)${NC}"
+    echo ""
+    info "To add a domain later, set domain_name in terraform.tfvars and"
+    info "re-run: ${BOLD}tofu apply${NC}"
+    return 0
+  fi
+
+  local ip=""
+  if ip="$(tofu output -raw instance_public_ip 2>/dev/null)" && [ -n "$ip" ]; then
+    success "Instance public IP: ${ip}"
+  else
+    warn "Could not read the instance IP yet (it may still be deploying)."
+    ip="<instance-public-ip>"
+  fi
+
+  echo ""
+  info "Create a DNS A record for your domain, pointing at the instance:"
+  echo ""
+  echo -e "  ${BOLD}Name:    ${domain}${NC}"
+  echo -e "  ${BOLD}Type:    A${NC}"
+  echo -e "  ${BOLD}Value:   ${ip}${NC}"
+  echo -e "  ${BOLD}TTL:     300${NC}"
+  echo ""
+  info "Route 53 (if you manage the zone there):"
+  echo -e "  ${BOLD}aws route53 change-resource-record-sets --hosted-zone-id <ZONE_ID> \\"
+  echo -e "  ${BOLD}  --change-batch '{\"Changes\":[{\"Action\":\"CREATE\",${NC}"
+  echo -e "  ${BOLD}    \"ResourceRecordSet\":{\"Name\":\"${domain}\",\"Type\":\"A\",${NC}"
+  echo -e "  ${BOLD}    \"TTL\":300,\"ResourceRecords\":[{\"Value\":\"${ip}\"}]}}]}'${NC}"
+  echo ""
+  info "DNS changes can take a while to propagate. Verify with:"
+  echo -e "  ${BOLD}dig +short ${domain}${NC}"
+  echo ""
+  warn "HTTPS comes after DNS. Let's Encrypt cannot issue a certificate until"
+  warn "${domain} resolves to ${ip} — on a first deploy the bootstrap"
+  warn "tries certbot and skips it if DNS is not live yet."
+  echo ""
+  info "Once DNS resolves, enable HTTPS on the instance:"
+  echo -e "  ${BOLD}ssh -i ~/.ssh/agent-office ubuntu@${ip}${NC}"
+  echo -e "  ${BOLD}sudo certbot --nginx -d ${domain} --non-interactive --agree-tos -m <YOUR_EMAIL> --redirect${NC}"
+  echo ""
+  info "After that, set letsencrypt_email in terraform.tfvars and run"
+  info "${BOLD}tofu apply${NC} so the domain is configured on future deploys."
 }
 
 # --- Main -------------------------------------------------------------
@@ -501,6 +557,7 @@ main() {
 
   step_configure
   step_deploy
+  step_dns
 
   echo ""
   success "Setup complete! 🎉"

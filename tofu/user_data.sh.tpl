@@ -111,8 +111,12 @@ SSH_DOMAIN = $GITEA_DOMAIN
 HTTP_PORT = 3000
 ROOT_URL = $GITEA_ROOT_URL
 LANDING_PAGE = explore
-DISABLE_SSH = false
-START_SSH_SERVER = true
+DISABLE_SSH = true
+START_SSH_SERVER = false
+# The system sshd already owns port 22, so Gitea's built-in SSH server cannot
+# bind it. Gitea treats that bind failure as fatal and exits, which leaves
+# nginx returning 502. The agents clone over HTTP, so Gitea SSH is not needed.
+SSH_PORT = 2222
 
 [database]
 DB_TYPE = sqlite3
@@ -483,17 +487,22 @@ chmod +x "$AGENT_DIR/agent-daemon.py"
 
 cat > /etc/systemd/system/opencode-agent-daemon@.service << 'SVCUNIT'
 [Unit]
-Description=OpenCode Agent Daemon: %I
+Description=OpenCode Agent Daemon: %i
 After=network.target redis-server.service
 [Service]
 Type=simple
-User=%I
-Group=%I
-WorkingDirectory=/home/%I/work
+# Must use %i (unescaped instance name), not %I. In User=/Group= the escaped
+# form %I makes systemd parse "agent-architect" as a name plus a stray
+# "/architect" suffix and refuse to load the unit:
+#   Invalid user/group name or numeric ID: agent-architect
+# Use %i in both settings and in WorkingDirectory so the values match exactly.
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/work
 ExecStart=/usr/bin/python3 /opt/opencode-office/agent-daemon.py
 Restart=always
 RestartSec=10
-EnvironmentFile=/home/%I/.agent-env
+EnvironmentFile=/home/%i/.agent-env
 [Install]
 WantedBy=multi-user.target
 SVCUNIT
@@ -649,10 +658,16 @@ systemctl enable atlantis
 ################################################
 
 systemctl daemon-reload
-systemctl enable opencode-webhook-receiver && systemctl restart opencode-webhook-receiver
+# Do not chain with && here: if enable fails, restart would be skipped silently
+# and the webhook receiver would be left inactive.
+systemctl enable opencode-webhook-receiver || echo "warning: could not enable webhook receiver"
+systemctl restart opencode-webhook-receiver || echo "warning: could not start webhook receiver"
 
+# Start the agent daemons as well as enabling them, so a fresh deploy comes up
+# with all agents consuming their queues.
 for username in "$${AGENT_USERS[@]}"; do
-  systemctl enable "opencode-agent-daemon@$username"
+  systemctl enable "opencode-agent-daemon@$username" || echo "warning: could not enable daemon for $username"
+  systemctl start  "opencode-agent-daemon@$username" || echo "warning: could not start daemon for $username"
 done
 
 ################################################
