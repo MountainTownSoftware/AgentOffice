@@ -230,6 +230,10 @@ done
 
 step "Configure"
 
+# Declared up front: `set -u` aborts on a reference to an unset variable, and
+# this one is only assigned when an existing tfvars is found.
+_skip_config=0
+
 if [ -f "$TFVARS" ]; then
   success "terraform.tfvars already exists"
   prompt "Overwrite it? [y/N] "
@@ -240,7 +244,7 @@ if [ -f "$TFVARS" ]; then
   fi
 fi
 
-if [ -z "$_skip_config" ]; then
+if [ "$_skip_config" -eq 0 ]; then
   prompt "OpenRouter API key [sk-or-v1-...]: "
   read -r OR_KEY
 
