@@ -37,34 +37,177 @@ done
 
 step "Checking this machine"
 
-command -v tofu >/dev/null || { error "OpenTofu not found. Install from https://opentofu.org"; exit 1; }
-success "tofu — $(tofu --version 2>&1 | head -1)"
-
-command -v jq >/dev/null || { error "jq not found. Install with: sudo apt-get install -y jq"; exit 1; }
-success "jq — $(jq --version)"
-
-if [ ! -f /etc/os-release ]; then
-  error "Cannot detect OS."
-  exit 1
-fi
-. /etc/os-release
-case "$ID" in
-  ubuntu|debian) success "${PRETTY_NAME}" ;;
-  *) warn "${PRETTY_NAME} — the bootstrap is written for Debian/Ubuntu and may need adjustments." ;;
-esac
-
-# The bootstrap installs packages, creates users, and writes /etc/systemd/system.
 if [ "$(id -u)" -ne 0 ]; then
   error "Must run as root (use sudo)."
   exit 1
 fi
 
-# sudo users keep their own HOME; root has /root. Use the invoking user's home
-# for the admin password file so it is easy to find.
+# sudo users keep their own HOME; root has /root. Resolved up front because the
+# opencode installer needs it to find where it put the binary.
 ADMIN_HOME="${SUDO_USER:-root}"
 ADMIN_HOME="$(getent passwd "$ADMIN_HOME" | cut -d: -f6)"
 [ -n "$ADMIN_HOME" ] || ADMIN_HOME=/root
 INVOKING_USER="${SUDO_USER:-root}"
+
+. /etc/os-release 2>/dev/null || true
+case "${ID:-}" in
+  ubuntu|debian) success "${PRETTY_NAME:-Linux}" ;;
+  *) warn "${PRETTY_NAME:-Unknown OS} — the bootstrap is written for Debian/Ubuntu and may need adjustments." ;;
+esac
+
+export DEBIAN_FRONTEND=noninteractive
+
+_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) echo "" ;;
+  esac
+}
+
+# Everything the bootstrap script (tofu/user_data.sh.tpl) expects to already be
+# present, plus what this installer uses itself. Installed up front so the
+# bootstrap does not fail partway through and leave a half-configured box.
+install_deps() {
+  local pkgs=(unzip curl jq git wget ca-certificates gnupg openssl
+              nginx redis-server python3 python3-pip python3-redis
+              python3-requests sqlite3 build-essential lsb-release)
+
+  local missing=()
+  local p
+  for p in "${pkgs[@]}"; do
+    if ! dpkg -s "$p" >/dev/null 2>&1; then
+      missing+=("$p")
+    fi
+  done
+
+  if [ "${#missing[@]}" -eq 0 ]; then
+    success "system packages — all present"
+    return 0
+  fi
+
+  info "Installing system packages: ${missing[*]}"
+  if apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq "${missing[@]}" >/tmp/ao-deps.log 2>&1; then
+    success "installed ${#missing[@]} package(s)"
+    return 0
+  fi
+
+  # A few distros split these out, so retry without the optional extras.
+  warn "Some packages failed — retrying without the optional set (see /tmp/ao-deps.log)"
+  if apt-get install -y -qq unzip curl jq git wget ca-certificates openssl \
+       nginx redis-server python3 python3-pip python3-redis python3-requests \
+       sqlite3 >/tmp/ao-deps2.log 2>&1; then
+    success "installed core packages"
+    return 0
+  fi
+
+  error "Could not install required packages."
+  error "See /tmp/ao-deps.log and /tmp/ao-deps2.log"
+  return 1
+}
+
+# Install OpenTofu if it is missing. Tries the official apt repo first, then
+# falls back to the release zip so this works on any Debian/Ubuntu box without
+# needing snap.
+install_tofu() {
+  local arch; arch="$(_arch)"
+  if [ -z "$arch" ]; then
+    error "Unsupported architecture: $(uname -m)"
+    return 1
+  fi
+
+  warn "OpenTofu not found — installing"
+
+  # Official installer (sets up the apt repo). Note the filename is
+  # install-opentofu.sh, not install.sh.
+  if apt-get update -qq >/dev/null 2>&1 \
+     && apt-get install -y -qq curl ca-certificates gnupg unzip >/dev/null 2>&1 \
+     && curl -fsSL https://get.opentofu.org/install-opentofu.sh -o /tmp/tofu-install.sh 2>/dev/null \
+     && chmod +x /tmp/tofu-install.sh \
+     && /tmp/tofu-install.sh -y >/tmp/tofu-install.log 2>&1; then
+    rm -f /tmp/tofu-install.sh
+    hash -r 2>/dev/null || true
+    if command -v tofu >/dev/null 2>&1; then
+      success "tofu installed — $(tofu --version 2>&1 | head -1)"
+      return 0
+    fi
+  fi
+  warn "Official installer failed (see /tmp/tofu-install.log) — trying the release archive"
+  rm -f /tmp/tofu-install.sh
+
+  # Fallback: download the release archive straight from GitHub.
+  info "Falling back to the release archive..."
+  local ver
+  ver="$(curl -fsSL https://api.github.com/repos/opentofu/opentofu/releases/latest \
+        | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')" || true
+  ver="${ver:-1.10.0}"
+  info "Downloading OpenTofu $ver ($arch)..."
+
+  local url="https://github.com/opentofu/opentofu/releases/download/v${ver}/tofu_${ver}_linux_${arch}.zip"
+  if curl -fsSL "$url" -o /tmp/tofu.zip 2>/dev/null \
+     && unzip -oq /tmp/tofu.zip -d /usr/local/bin tofu 2>/dev/null; then
+    chmod +x /usr/local/bin/tofu
+    rm -f /tmp/tofu.zip
+    hash -r 2>/dev/null || true
+    success "tofu installed — $(tofu --version 2>&1 | head -1)"
+    return 0
+  fi
+
+  rm -f /tmp/tofu.zip
+  error "Could not install OpenTofu automatically."
+  error "Install it manually, then re-run:"
+  error "  https://opentofu.org/docs/intro/install/"
+  return 1
+}
+
+if command -v tofu >/dev/null 2>&1; then
+  success "tofu — $(tofu --version 2>&1 | head -1)"
+else
+  install_tofu || exit 1
+fi
+
+install_deps || exit 1
+success "jq — $(jq --version)"
+success "git — $(git --version | awk '{print $3}')"
+
+# opencode drives every agent. It is not in the distro repos, so install it here
+# rather than letting agents fail silently later. The installer redirects to
+# the real script, so -L is required, and it installs per-user (~/.opencode/bin)
+# which is not on root's PATH — hence the explicit symlink.
+if command -v opencode >/dev/null 2>&1; then
+  success "opencode — $(opencode --version 2>&1 | head -1)"
+else
+  warn "opencode not found — installing"
+  INSTALL_HOME="${ADMIN_HOME:-/root}"
+  if curl -fsSL https://opencode.ai/install -o /tmp/oc-install.sh 2>/dev/null \
+     && bash /tmp/oc-install.sh >/tmp/oc-install.log 2>&1; then
+    hash -r 2>/dev/null || true
+    # Make it visible system-wide so the per-agent systemd services find it.
+    for candidate in \
+      "$INSTALL_HOME/.opencode/bin/opencode" \
+      "$INSTALL_HOME/.local/bin/opencode" \
+      /usr/local/bin/opencode; do
+      if [ -x "$candidate" ]; then
+        [ "$candidate" = /usr/local/bin/opencode ] || ln -sf "$candidate" /usr/local/bin/opencode
+        break
+      fi
+    done
+    hash -r 2>/dev/null || true
+    rm -f /tmp/oc-install.sh
+    if command -v opencode >/dev/null 2>&1; then
+      success "opencode installed → $(command -v opencode)"
+    else
+      warn "opencode installed but not on PATH — check /tmp/oc-install.log"
+    fi
+  else
+    warn "Could not install opencode automatically (see /tmp/oc-install.log)"
+    warn "Agents will not do any work until it is installed:"
+    warn "  curl -fsSL https://opencode.ai/install | bash"
+  fi
+fi
+
+# The admin password file lands in the invoking user's home so it is easy to
+# find (ADMIN_HOME was resolved near the top of this script).
 info "Admin password will be written to ${BOLD}$ADMIN_HOME/.gitea_admin_password${NC}"
 
 MEM_GB=$(awk '/MemTotal/ {printf "%.1f", $2/1024/1024}' /proc/meminfo)
@@ -74,6 +217,14 @@ if awk "BEGIN{exit !($AVAIL_GB < 2.5)}"; then
   warn "Less than 2.5 GB available. Gitea (~280MB) plus each running agent"
   warn "and opencode (~270MB) will exhaust this box. Close other work first."
 fi
+
+# Ports the stack binds. A conflict means something else is already using them.
+for port in 3000 9090; do
+  if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}\$"; then
+    warn "Port $port is already in use — Gitea or the webhook receiver may"
+    warn "fail to bind. Check with: ss -ltnp | grep $port"
+  fi
+done
 
 # --- Config ------------------------------------------------------------
 
