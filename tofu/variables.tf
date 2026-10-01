@@ -103,6 +103,23 @@ variable "letsencrypt_email" {
   default     = ""
 }
 
+variable "deploy_target" {
+  description = "Where the bootstrap is running. 'aws' reads secrets from Secrets Manager and uses instance metadata; 'local' takes secrets from the environment and serves plain HTTP."
+  type        = string
+  default     = "aws"
+
+  validation {
+    condition     = contains(["aws", "local"], var.deploy_target)
+    error_message = "deploy_target must be either \"aws\" or \"local\"."
+  }
+}
+
+variable "admin_home" {
+  description = "Home directory the Gitea admin password file is written to. On EC2 this is the ubuntu user's home; locally it is the invoking user's."
+  type        = string
+  default     = "/home/ubuntu"
+}
+
 variable "source_repo_url" {
   description = "Public git URL of this project (e.g. GitHub). If set, the bootstrap clones and pushes these tofu files into the AgentOffice - Tofu Gitea repo."
   type        = string

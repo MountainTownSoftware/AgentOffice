@@ -40,7 +40,44 @@ Gitea Issue → Webhook → Redis Queue → Agent Daemon → opencode run → gi
 
 Each agent has its own Linux account, its own Redis queue, and runs as a systemd daemon.
 
-## Install
+## Local Install (no AWS)
+
+Deploy to a Linux box you already own instead of EC2. No AWS resources are created — no VPC, no instance, no IAM, no Secrets Manager. Needs `tofu` and `jq` on the box.
+
+```bash
+git clone https://github.com/MountainTownSoftware/AgentOffice.git
+cd AgentOffice
+sudo ./local-install.sh
+```
+
+The installer prompts for your OpenRouter key and Gitea admin password, writes `tofu/terraform.tfvars`, renders the bootstrap script, and runs it. Everything is served over **plain HTTP** on the box's LAN address — Let's Encrypt can't issue a certificate for a local host.
+
+To inspect what it will run before executing anything:
+
+```bash
+sudo ./local-install.sh --render-only   # writes /tmp/agent-office-bootstrap.sh
+```
+
+It installs Gitea, Redis, nginx, OpenTofu, and Atlantis, creates the six agent users, and starts the agent daemons as systemd services. Afterwards:
+
+```bash
+systemctl status gitea nginx redis-server opencode-webhook-receiver
+journalctl -u opencode-agent-daemon@agent-lead -f   # watch an agent work
+sudo cat ~/.gitea_admin_password                    # Gitea admin login
+```
+
+To remove it:
+
+```bash
+sudo ./local-uninstall.sh            # dry run
+sudo ./local-uninstall.sh --yes      # actually remove
+```
+
+The uninstaller leaves Redis and nginx installed, and only deletes the `queue:agent-*` Redis keys it owns.
+
+> **Note on memory:** Gitea uses ~280 MB, and each running agent plus its `opencode` process uses roughly 270 MB. Allow ~2.5 GB free, or agents will hit OOM kills. This is why a `t2.micro` is not enough.
+
+## AWS Install
 
 The fastest way to get started is the one-command installer, which checks for missing dependencies, installs them, configures your AWS credentials and SSH key, and walks through deployment:
 
@@ -62,7 +99,7 @@ The installer:
 5. Prompts for your OpenRouter API key, Gitea admin password, domain, and Discord token
 6. Runs `tofu init && tofu plan`, then offers to apply
 
-## Manual Deploy
+## Manual AWS Deploy
 
 ```bash
 # 1. Clone

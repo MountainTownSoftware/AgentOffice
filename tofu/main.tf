@@ -79,6 +79,13 @@ resource "aws_instance" "office" {
     source_repo_url   = var.source_repo_url
     atlantis_version  = var.atlantis_version
     tofu_version      = var.tofu_version
+    deploy_target     = var.deploy_target
+    admin_home        = var.admin_home
+    # Only used when deploy_target = "local"; on AWS the bootstrap reads these
+    # from Secrets Manager instead.
+    openrouter_api_key   = var.deploy_target == "local" ? var.openrouter_api_key : ""
+    discord_bot_token    = var.deploy_target == "local" ? var.discord_bot_token : ""
+    gitea_admin_password = var.deploy_target == "local" ? var.gitea_admin_password : ""
   }))
   user_data_replace_on_change = true
 

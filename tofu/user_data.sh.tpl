@@ -2,6 +2,10 @@
 set -euo pipefail
 echo "=== OpenCode Office Bootstrap — $(date) ==="
 
+# Deployment target. "aws" is the default (EC2 via cloud-init); "local" is set
+# by the local installer and removes the EC2/Secrets Manager dependencies.
+DEPLOY_TARGET="${deploy_target}"
+
 # Non-secret Terraform-injected values
 GITEA_VERSION="${gitea_version}"
 DOMAIN_NAME="${domain_name}"
@@ -18,34 +22,69 @@ MODEL_SENIOR="${agent_models["senior_developer"]}"
 MODEL_JUNIOR="${agent_models["junior_developer"]}"
 MODEL_SDET="${agent_models["sdet"]}"
 
+# Where the admin password is dropped for the operator. On EC2 this is the
+# default "ubuntu" user's home; locally it is whoever ran the installer.
+ADMIN_HOME="${admin_home}"
+
 ################################################
-# Secrets — read from AWS Secrets Manager
+# Secrets
+#
+# On AWS they come from Secrets Manager. Locally they are passed straight in
+# through the environment by the installer, so no AWS credentials are needed.
 ################################################
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq unzip curl jq
 
-# Install AWS CLI v2
-if ! command -v aws >/dev/null 2>&1; then
-  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-  unzip -q /tmp/awscliv2.zip -d /tmp
-  /tmp/aws/install --update 2>&1 | tail -1 || true
+if [ "$DEPLOY_TARGET" = "aws" ]; then
+  # Install AWS CLI v2
+  if ! command -v aws >/dev/null 2>&1; then
+    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install --update 2>&1 | tail -1 || true
+  fi
+
+  SECRETS_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id "${project_name}-secrets" \
+    --region "$AWS_REGION" \
+    --query SecretString \
+    --output text 2>/dev/null || echo '{}')
+
+  OPENROUTER_API_KEY=$(echo "$SECRETS_JSON" | jq -r '.openrouter_api_key // empty')
+  DISCORD_BOT_TOKEN=$(echo "$SECRETS_JSON" | jq -r '.discord_bot_token // empty')
+  GITEA_ADMIN_PASSWORD=$(echo "$SECRETS_JSON" | jq -r '.gitea_admin_password // empty')
+
+  if [ -z "$GITEA_ADMIN_PASSWORD" ]; then
+    echo "ERROR: Failed to read secrets from AWS Secrets Manager" >&2
+    exit 1
+  fi
+else
+  OPENROUTER_API_KEY="${openrouter_api_key}"
+  DISCORD_BOT_TOKEN="${discord_bot_token}"
+  GITEA_ADMIN_PASSWORD="${gitea_admin_password}"
+
+  if [ -z "$GITEA_ADMIN_PASSWORD" ]; then
+    echo "ERROR: gitea_admin_password is required for a local deploy" >&2
+    exit 1
+  fi
 fi
 
-SECRETS_JSON=$(aws secretsmanager get-secret-value \
-  --secret-id "${project_name}-secrets" \
-  --region "$AWS_REGION" \
-  --query SecretString \
-  --output text 2>/dev/null || echo '{}')
-
-OPENROUTER_API_KEY=$(echo "$SECRETS_JSON" | jq -r '.openrouter_api_key // empty')
-DISCORD_BOT_TOKEN=$(echo "$SECRETS_JSON" | jq -r '.discord_bot_token // empty')
-GITEA_ADMIN_PASSWORD=$(echo "$SECRETS_JSON" | jq -r '.gitea_admin_password // empty')
-
-if [ -z "$GITEA_ADMIN_PASSWORD" ]; then
-  echo "ERROR: Failed to read secrets from AWS Secrets Manager" >&2
-  exit 1
+# Lets Encrypt only makes sense for a public domain; a local box is plain HTTP.
+if [ "$DEPLOY_TARGET" = "local" ]; then
+  DOMAIN_NAME=""
+  LETSENCRYPT_EMAIL=""
 fi
+
+# Address other machines use to reach this host. On EC2 the public IP comes from
+# instance metadata; locally we pick the primary LAN address, since there is no
+# NAT'd public address to rely on.
+detect_host_ip() {
+  if [ "$DEPLOY_TARGET" = "aws" ]; then
+    curl -s --max-time 5 http://169.254.169.254/latest/meta-data/public-ipv4 || true
+    return
+  fi
+  ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}'
+}
 
 ################################################
 # Base packages
@@ -151,8 +190,8 @@ systemctl enable gitea && systemctl restart gitea
 sleep 5
 
 ADMIN_PW="$GITEA_ADMIN_PASSWORD"
-echo "$ADMIN_PW" > /home/ubuntu/.gitea_admin_password
-chmod 600 /home/ubuntu/.gitea_admin_password
+echo "$ADMIN_PW" > "$ADMIN_HOME/.gitea_admin_password"
+chmod 600 "$ADMIN_HOME/.gitea_admin_password"
 
 sudo -u gitea GITEA_WORK_DIR=/var/lib/gitea /usr/local/bin/gitea admin user create \
   --admin --username admin --password "$ADMIN_PW" \
@@ -599,7 +638,7 @@ WEBHOOK_SECRET=$(openssl rand -hex 16)
 if [ -n "$DOMAIN_NAME" ]; then
   ATLANTIS_URL="https://$DOMAIN_NAME/atlantis"
 else
-  PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+  PUBLIC_IP=$(detect_host_ip)
   ATLANTIS_URL="http://$PUBLIC_IP/atlantis"
 fi
 
@@ -674,7 +713,7 @@ done
 # Self-host: push tofu files into AgentOffice - Tofu repo
 ################################################
 
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+PUBLIC_IP=$(detect_host_ip)
 
 if [ -n "$SOURCE_REPO_URL" ]; then
   # The repo was created above during bootstrap; wait for it to be reachable.
@@ -711,7 +750,7 @@ fi
 
 echo "  Gitea URL:      $GITEA_URL"
 echo "  Gitea admin:    admin / $ADMIN_PW"
-echo "  Admin pwd file: /home/ubuntu/.gitea_admin_password"
+echo "  Admin pwd file: $ADMIN_HOME/.gitea_admin_password"
 echo ""
 echo "=== Agent Accounts ==="
 for username in "$${AGENT_USERS[@]}"; do
